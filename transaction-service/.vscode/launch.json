@@ -1,0 +1,22 @@
+{
+  "name": "transaction-service",
+  "type": "node",
+  "request": "launch",
+  "program": "${workspaceFolder}/src/server.js",
+  "env": {
+    "NODE_ENV": "development",
+    "PORT": "3003",
+    "DB_HOST": "localhost",
+    "DB_PORT": "5432",
+    "DB_NAME": "transaction_db",
+    "DB_USER": "postgres",
+    "DB_PASSWORD": "password",
+    "LOG_LEVEL": "debug"
+  },
+  "console": "integratedTerminal",
+  "restart": true,
+  "runtimeExecutable": "node",
+  "skipFiles": [
+    "<node_internals>/**"
+  ]
+}

@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  transaction-db:
+    image: postgres:15-alpine
+    container_name: transaction-db
+    environment:
+      POSTGRES_DB: transaction_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - transaction-db-data:/var/lib/postgresql/data
+      - ./src/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transaction_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Transaction Service
+  transaction-service:
+    build: .
+    container_name: transaction-service
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DB_HOST: transaction-db
+      DB_PORT: 5432
+      DB_NAME: transaction_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+      LOG_LEVEL: info
+    ports:
+      - "3003:3003"
+    depends_on:
+      transaction-db:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - banking-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching (optional - for future use)
+  redis:
+    image: redis:7-alpine
+    container_name: transaction-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - banking-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Adminer for database management (development only)
+  adminer:
+    image: adminer:latest
+    container_name: transaction-adminer
+    ports:
+      - "8081:8080"
+    networks:
+      - banking-network
+    profiles:
+      - dev
+
+volumes:
+  transaction-db-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  banking-network:
+    driver: bridge
+    external: true
