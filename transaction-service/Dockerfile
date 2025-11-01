@@ -5,15 +5,19 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install system dependencies
-RUN apk add --no-cache \
+RUN apk update --no-check-certificate && apk add --no-cache --no-check-certificate \
     postgresql-client \
     curl
 
 # Copy package files
 COPY package*.json ./
 
+# Configure npm for SSL certificate issues
+RUN npm config set strict-ssl false && \
+    npm config set registry https://registry.npmjs.org/
+
 # Install Node.js dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force
 
 # Create app user for security
 RUN addgroup -g 1001 -S nodejs

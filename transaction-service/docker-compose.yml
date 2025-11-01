@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   transaction-db:
@@ -51,23 +49,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Redis for caching (optional - for future use)
-  redis:
-    image: redis:7-alpine
-    container_name: transaction-redis
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - banking-network
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # Adminer for database management (development only)
   adminer:
