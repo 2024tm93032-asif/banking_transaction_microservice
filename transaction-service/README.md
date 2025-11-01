@@ -350,6 +350,9 @@ curl http://localhost:3003/health
 ### 2. **Swagger Documentation**
 Open http://localhost:3003/api-docs in your browser for interactive API testing
 
+<img width="942" height="326" alt="image" src="https://github.com/user-attachments/assets/52a2a716-d1c2-4d06-bff0-416a34308a84" />
+
+
 ### 3. **Sample API Calls**
 
 #### Deposit Transaction
@@ -405,59 +408,8 @@ Access Adminer at http://localhost:8081 (when started with `--profile dev`):
 - **Password**: password
 - **Database**: transaction_db
 
-### 5. **RabbitMQ Management Interface**
+  <img width="478" height="215" alt="image" src="https://github.com/user-attachments/assets/e548d707-bf9c-4571-866b-9e7a87fcb256" />
 
-Access RabbitMQ Management UI at http://localhost:15672:
-
-**Login Credentials:**
-- **Username**: admin
-- **Password**: password
-
-**What you can do:**
-- ✅ **Monitor Queues**: View `customer.updates` and `account.updates` queues
-- ✅ **Check Exchanges**: Monitor `customer.events` and `account.events` exchanges
-- ✅ **View Messages**: See message rates, queue lengths, and consumer status
-- ✅ **Debug Issues**: Check connection status and message flow
-- ✅ **Manual Testing**: Publish test messages to queues
-
-**Key Queues to Monitor:**
-- `customer.updates` - Customer projection updates
-- `account.updates` - Account projection updates
-
-**Key Exchanges:**
-- `customer.events` - Customer service events
-- `account.events` - Account service events
-
-### 6. **Consumer Status Monitoring**
-
-Check consumer health via the health endpoint:
-```bash
-curl http://localhost:3003/health
-```
-
-The response includes messaging status:
-```json
-{
-  "data": {
-    "status": "healthy",
-    "database": {...},
-    "messaging": {
-      "status": "healthy",
-      "rabbitMQ": "connected",
-      "consumers": {
-        "CustomerConsumer": {
-          "consuming": true,
-          "connected": true
-        },
-        "AccountConsumer": {
-          "consuming": true,
-          "connected": true
-        }
-      }
-    }
-  }
-}
-```
 
 ## 📊 Sample Data
 
