@@ -174,6 +174,9 @@ curl http://localhost:3003/health
 ### 2. **Swagger Documentation**
 Open http://localhost:3003/api-docs in your browser for interactive API testing
 
+<img width="942" height="326" alt="image" src="https://github.com/user-attachments/assets/52a2a716-d1c2-4d06-bff0-416a34308a84" />
+
+
 ### 3. **Sample API Calls**
 
 #### Deposit Transaction
