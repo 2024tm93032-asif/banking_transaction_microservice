@@ -30,15 +30,41 @@ This service follows microservices architecture principles with **Event-Driven A
 ### 🏗️ **Architecture Pattern**
 
 ```
-┌─────────────────┐    Events     ┌──────────────────────┐
-│ Customer Service├──────────────►│  Transaction Service │
-└─────────────────┘    (RabbitMQ) │                      │
-                                  │ ┌──────────────────┐ │
-┌─────────────────┐    Events     │ │ customer_projections│ │
-│ Account Service ├──────────────►│ │ account_projections │ │
-└─────────────────┘    (RabbitMQ) │ │ transactions       │ │
-                                  │ └──────────────────┘ │
-                                  └──────────────────────┘
+                          ┌─────────────────────────────────────────┐
+                          │           Transaction Service           │
+                          │                                         │
+         Consume Events   │ ┌──────────────────┐                   │   Publish Events
+┌─────────────────┐       │ │ customer_projections│                   │       ┌─────────────────┐
+│ Customer Service├───────┼►│ account_projections │                   ├──────►│ Notification    │
+└─────────────────┘       │ │ transactions       │                   │       │ Service         │
+     (RabbitMQ)           │ └──────────────────┘                   │       └─────────────────┘
+                          │                                         │            (RabbitMQ)
+┌─────────────────┐       │        ┌─────────────────┐              │       ┌─────────────────┐
+│ Account Service ├───────┼───────►│ TransactionService│              ├──────►│ Analytics       │
+└─────────────────┘       │        │                 │              │       │ Service         │
+     (RabbitMQ)           │        │ • processDeposit │              │       └─────────────────┘
+                          │        │ • processWithdrawal│            │            (RabbitMQ)
+                          │        │ • processTransfer│              │
+                          │        └─────────────────┘              │       ┌─────────────────┐
+                          │                                         ├──────►│ Audit           │
+                          │        ┌─────────────────┐              │       │ Service         │
+                          │        │ TransactionPublisher│           │       └─────────────────┘
+                          │        │                 │              │            (RabbitMQ)
+                          │        │ • publishTransactionCompleted│  │
+                          │        │ • publishTransferCreated    │  │       ┌─────────────────┐
+                          │        │ • publishBalanceUpdated    │  ├──────►│ Reporting       │
+                          │        └─────────────────┘              │       │ Service         │
+                          └─────────────────────────────────────────┘       └─────────────────┘
+                                                                                     (RabbitMQ)
+
+Event Flow:
+1. Customer/Account Services → RabbitMQ → Transaction Service (Updates Projections)
+2. Transaction Service → RabbitMQ → Other Services (Transaction Events)
+
+Published Events:
+• transaction.completed (deposits, withdrawals)
+• transfer.created (fund transfers)
+• balance.updated (real-time balance changes)
 ```
 
 ### 🎯 **Data Projections Explained**
@@ -59,6 +85,8 @@ This service follows microservices architecture principles with **Event-Driven A
 ### 🐰 **RabbitMQ Integration**
 
 #### **Message Flow:**
+
+**Incoming Events (Consumption):**
 ```
 Customer Service ──────┐
                       │
@@ -69,6 +97,34 @@ Customer Service ──────┐
                       ▼
               CustomerConsumer ────► customer_projections table
               (Transaction Service)
+
+Account Service ───────┐
+                      │
+                      ▼
+                 RabbitMQ Queue
+                  (account.events)
+                      │
+                      ▼
+              AccountConsumer ─────► account_projections table
+              (Transaction Service)
+```
+
+**Outgoing Events (Publishing):**
+```
+Transaction Service ───┐
+                      │
+                      ▼
+              TransactionPublisher
+                      │
+                      ▼
+                 RabbitMQ Queues
+            (transaction.events, balance.events)
+                      │
+                      ▼
+    ┌─────────────────┼─────────────────┬─────────────────┐
+    ▼                 ▼                 ▼                 ▼
+Notification      Analytics         Audit           Reporting
+Service           Service          Service          Service
 ```
 
 #### **Event Types:**
