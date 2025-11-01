@@ -33,10 +33,13 @@ services:
       DB_USER: postgres
       DB_PASSWORD: password
       LOG_LEVEL: info
+      RABBITMQ_URL: amqp://admin:password@rabbitmq:5672
     ports:
       - "3003:3003"
     depends_on:
       transaction-db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
@@ -49,6 +52,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: transaction-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password
+      RABBITMQ_DEFAULT_VHOST: /
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI port
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # Adminer for database management (development only)
   adminer:
@@ -63,6 +87,8 @@ services:
 
 volumes:
   transaction-db-data:
+    driver: local
+  rabbitmq-data:
     driver: local
   redis-data:
     driver: local

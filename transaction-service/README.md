@@ -18,12 +18,182 @@ A Node.js microservice for handling banking transactions including deposits, wit
 
 ## Architecture
 
-This service follows microservices architecture principles:
+This service follows microservices architecture principles with **Event-Driven Architecture** and **CQRS (Command Query Responsibility Segregation)** patterns:
+
 - **Database per Service**: Owns `transactions` and `idempotency_keys` tables
-- **Denormalized Data**: Contains minimal account/customer info for queries
+- **Data Projections**: Local copies of customer and account data for fast queries
+- **Event Sourcing**: Updates projections via RabbitMQ events from other services
 - **Service Boundaries**: No shared database tables with other services
 - **API First**: Well-defined REST API with OpenAPI specification
 - **Containerized**: Fully containerized with Docker and Docker Compose
+
+### 🏗️ **Architecture Pattern**
+
+```
+┌─────────────────┐    Events     ┌──────────────────────┐
+│ Customer Service├──────────────►│  Transaction Service │
+└─────────────────┘    (RabbitMQ) │                      │
+                                  │ ┌──────────────────┐ │
+┌─────────────────┐    Events     │ │ customer_projections│ │
+│ Account Service ├──────────────►│ │ account_projections │ │
+└─────────────────┘    (RabbitMQ) │ │ transactions       │ │
+                                  │ └──────────────────┘ │
+                                  └──────────────────────┘
+```
+
+### 🎯 **Data Projections Explained**
+
+**Projections** are **denormalized copies** of data from other services stored locally to avoid cross-service database queries.
+
+#### **Benefits:**
+- ✅ **Fast Performance** - No network latency
+- ✅ **High Availability** - Works even if other services are down
+- ✅ **Service Independence** - No cascading failures
+- ✅ **Better Scalability** - Reduced cross-service calls
+
+#### **Trade-offs:**
+- ❌ **Eventual Consistency** - Data might be slightly stale
+- ❌ **Storage Overhead** - Duplicate data
+- ❌ **Sync Complexity** - Need to maintain via events
+
+### 🐰 **RabbitMQ Integration**
+
+#### **Message Flow:**
+```
+Customer Service ──────┐
+                      │
+                      ▼
+                 RabbitMQ Queue
+                  (customer.events)
+                      │
+                      ▼
+              CustomerConsumer ────► customer_projections table
+              (Transaction Service)
+```
+
+#### **Event Types:**
+
+**Customer Events:**
+- `customer.created` - New customer registration
+- `customer.updated` - Customer information changes
+- `customer.status.changed` - Status updates (ACTIVE/INACTIVE/SUSPENDED)
+- `customer.deleted` - Customer account closure
+
+**Account Events:**
+- `account.created` - New account opening
+- `account.updated` - Account information changes
+- `account.status.changed` - Status updates (ACTIVE/FROZEN/CLOSED)
+- `account.balance.updated` - Balance changes from other services
+
+#### **Message Format:**
+```json
+{
+  "messageId": "uuid-here",
+  "timestamp": "2025-11-01T00:00:00Z",
+  "eventType": "customer.created",
+  "data": {
+    "customerId": 123,
+    "customerNumber": "CUST123",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john@example.com",
+    "phone": "+91-9876543210",
+    "status": "ACTIVE"
+  }
+}
+```
+
+#### **Consumer Features:**
+- ✅ **Auto-reconnection** to RabbitMQ
+- ✅ **Retry logic** with exponential backoff
+- ✅ **Dead letter handling** for failed messages
+- ✅ **Health monitoring** for all components
+- ✅ **Graceful shutdown** handling
+- ✅ **Idempotent** message processing
+
+#### **Transaction Event Publishing:**
+
+The transaction service publishes events for all financial transactions, enabling other services to consume transaction data in real-time.
+
+**Published Queues:**
+- `transaction.events` - All transaction-related events
+- `balance.events` - Balance update notifications
+
+**Event Types:**
+
+**Transaction Events:**
+- `transaction.completed` - Deposit/Withdrawal completed
+- `transfer.created` - Transfer between accounts
+- `balance.updated` - Account balance changes
+
+**Message Format Examples:**
+
+*Transaction Completed Event:*
+```json
+{
+  "messageId": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2025-01-20T10:30:00Z",
+  "eventType": "transaction.completed",
+  "routingKey": "transaction.completed.deposit",
+  "data": {
+    "transactionId": "TXN123456789",
+    "accountId": 1001,
+    "amount": 50000.00,
+    "type": "DEPOSIT",
+    "reference": "DEP-20250120-001",
+    "counterparty": "Cash Deposit",
+    "description": "Monthly salary deposit",
+    "newBalance": 125000.00,
+    "timestamp": "2025-01-20T10:30:00Z"
+  }
+}
+```
+
+*Transfer Created Event:*
+```json
+{
+  "messageId": "550e8400-e29b-41d4-a716-446655440001",
+  "timestamp": "2025-01-20T10:35:00Z",
+  "eventType": "transfer.created",
+  "routingKey": "transfer.created",
+  "data": {
+    "transferReference": "TRF-20250120-001",
+    "fromAccountId": 1001,
+    "toAccountId": 1002,
+    "amount": 25000.00,
+    "description": "Payment to vendor",
+    "debitTransactionId": "TXN123456790",
+    "creditTransactionId": "TXN123456791",
+    "fromAccountNewBalance": 100000.00,
+    "toAccountNewBalance": 75000.00,
+    "timestamp": "2025-01-20T10:35:00Z"
+  }
+}
+```
+
+*Balance Updated Event:*
+```json
+{
+  "messageId": "550e8400-e29b-41d4-a716-446655440002",
+  "timestamp": "2025-01-20T10:35:00Z",
+  "eventType": "balance.updated",
+  "routingKey": "balance.updated.1001",
+  "data": {
+    "accountId": 1001,
+    "newBalance": 100000.00,
+    "transactionId": "TXN123456790",
+    "changeAmount": -25000.00,
+    "timestamp": "2025-01-20T10:35:00Z"
+  }
+}
+```
+
+**Publisher Features:**
+- ✅ **Non-blocking** - Events published asynchronously
+- ✅ **Error isolation** - Publisher failures don't affect transactions
+- ✅ **Comprehensive events** - All transaction types covered
+- ✅ **Structured data** - Consistent message formats
+- ✅ **Real-time** - Events published immediately after transactions
 
 ## 🐳 Docker Setup (Recommended)
 
@@ -141,6 +311,7 @@ docker system prune -f
 |---------|----------------|---------------|---------------|-------------|
 | **Transaction Service** | `transaction-service` | 3003 | 3003 | Main Node.js application |
 | **PostgreSQL Database** | `transaction-db` | 5432 | 5433 | Database server |
+| **RabbitMQ** | `transaction-rabbitmq` | 5672, 15672 | 5672, 15672 | Message broker + Management UI |
 | **Adminer** | `transaction-adminer` | 8080 | 8081 | Database admin UI (dev only) |
 
 ### Environment Configuration
@@ -153,6 +324,11 @@ PORT: 3003
 DB_HOST: transaction-db
 DB_PORT: 5432
 DB_NAME: transaction_db
+DB_USER: postgres
+DB_PASSWORD: password
+LOG_LEVEL: info
+RABBITMQ_URL: amqp://admin:password@rabbitmq:5672
+```
 DB_USER: postgres
 DB_PASSWORD: password
 LOG_LEVEL: info
@@ -229,13 +405,80 @@ Access Adminer at http://localhost:8081 (when started with `--profile dev`):
 - **Password**: password
 - **Database**: transaction_db
 
+### 5. **RabbitMQ Management Interface**
+
+Access RabbitMQ Management UI at http://localhost:15672:
+
+**Login Credentials:**
+- **Username**: admin
+- **Password**: password
+
+**What you can do:**
+- ✅ **Monitor Queues**: View `customer.updates` and `account.updates` queues
+- ✅ **Check Exchanges**: Monitor `customer.events` and `account.events` exchanges
+- ✅ **View Messages**: See message rates, queue lengths, and consumer status
+- ✅ **Debug Issues**: Check connection status and message flow
+- ✅ **Manual Testing**: Publish test messages to queues
+
+**Key Queues to Monitor:**
+- `customer.updates` - Customer projection updates
+- `account.updates` - Account projection updates
+
+**Key Exchanges:**
+- `customer.events` - Customer service events
+- `account.events` - Account service events
+
+### 6. **Consumer Status Monitoring**
+
+Check consumer health via the health endpoint:
+```bash
+curl http://localhost:3003/health
+```
+
+The response includes messaging status:
+```json
+{
+  "data": {
+    "status": "healthy",
+    "database": {...},
+    "messaging": {
+      "status": "healthy",
+      "rabbitMQ": "connected",
+      "consumers": {
+        "CustomerConsumer": {
+          "consuming": true,
+          "connected": true
+        },
+        "AccountConsumer": {
+          "consuming": true,
+          "connected": true
+        }
+      }
+    }
+  }
+}
+```
+
 ## 📊 Sample Data
 
 After running the seed command, you'll have:
 
+- **7 Customer Projections** with sample customer data
 - **8 Account Projections** with different account types
 - **10 Sample Transactions** across various accounts
 - **2 Idempotency Keys** for testing duplicate prevention
+
+### Available Test Customers
+
+| Customer ID | Customer Number | Name | Email | Status |
+|-------------|-----------------|------|--------|---------|
+| 1 | CUST001 | John Doe | john.doe@email.com | ACTIVE |
+| 2 | CUST002 | Jane Smith | jane.smith@email.com | ACTIVE |
+| 8 | CUST008 | Michael Johnson | michael.johnson@email.com | ACTIVE |
+| 9 | CUST009 | Sarah Wilson | sarah.wilson@email.com | ACTIVE |
+| 25 | CUST025 | David Brown | david.brown@email.com | ACTIVE |
+| 28 | CUST028 | Emily Davis | emily.davis@email.com | ACTIVE |
+| 35 | CUST035 | Robert Miller | robert.miller@email.com | ACTIVE |
 
 ### Available Test Accounts
 
@@ -268,13 +511,87 @@ docker-compose ps
 docker-compose logs transaction-db
 ```
 
-**3. Build Failures**
+**3. RabbitMQ Connection Issues**
+```bash
+# Check RabbitMQ container status
+docker-compose ps rabbitmq
+
+# View RabbitMQ logs
+docker-compose logs rabbitmq
+
+# Check consumer status
+curl http://localhost:3003/health
+
+# Restart RabbitMQ if needed
+docker-compose restart rabbitmq
+```
+
+**4. Consumer Not Consuming Messages**
+```bash
+# Check consumer logs
+docker-compose logs -f transaction-service
+
+# View RabbitMQ management UI
+# Open: http://localhost:15672 (admin/password)
+
+# Check if queues exist and have consumers
+# Look for: customer.updates, account.updates queues
+```
+
+**5. Transaction Events Not Publishing**
+```bash
+# Check if transaction publisher is initialized
+grep "Transaction publisher initialized" logs/app.log
+
+# Check for publishing errors
+grep "Failed to publish.*event" logs/app.log
+
+# Verify transaction events queue exists
+# Open RabbitMQ Management: http://localhost:15672
+# Check for: transaction.events, balance.events queues
+
+# Test transaction and check logs
+curl -X POST http://localhost:3003/api/transactions/deposit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account_id": 1,
+    "amount": 1000,
+    "counterparty": "Test Deposit",
+    "description": "Testing event publishing"
+  }'
+
+# Check logs for event publishing
+docker-compose logs -f transaction-service | grep "publish"
+```
+
+**6. Missing Transaction Events**
+```bash
+# Verify publisher initialization in logs
+grep "TransactionPublisher.*initialized" logs/app.log
+
+# Check for warnings about missing publisher
+grep "TransactionPublisher not available" logs/app.log
+
+# If publisher not available, restart the service
+docker-compose restart transaction-service
+
+# Monitor startup logs
+docker-compose logs -f transaction-service
+```
+
+**5. Build Failures**
 ```bash
 # Clean build
 docker-compose down
 docker system prune -f
 docker-compose build --no-cache
 docker-compose up
+```
+
+**6. SSL Certificate Issues**
+```bash
+# The Dockerfile includes SSL workarounds
+# If issues persist, check your network/firewall settings
 ```
 
 **4. SSL Certificate Issues**
@@ -331,14 +648,35 @@ Once the service is running, access the API documentation at:
 
 ### Tables Owned by This Service:
 
+#### customer_projections (denormalized from Customer Service)
+- `customer_id` (Primary Key)
+- `customer_number` (String - unique)
+- `first_name` (String)
+- `last_name` (String)
+- `email` (String)
+- `phone` (String)
+- `status` (ENUM: ACTIVE, INACTIVE, SUSPENDED, CLOSED)
+- `last_updated` (Timestamp)
+
+#### account_projections (denormalized from Account Service)
+- `account_id` (Primary Key)
+- `customer_id` (Foreign Key to customer_projections)
+- `account_number` (String - unique)
+- `account_type` (ENUM: SAVINGS, CURRENT, SALARY)
+- `current_balance` (Decimal)
+- `currency` (String)
+- `status` (ENUM: ACTIVE, FROZEN, CLOSED)
+- `last_updated` (Timestamp)
+
 #### transactions
 - `txn_id` (Primary Key)
-- `account_id` (Foreign Key reference)
+- `account_id` (Foreign Key to account_projections)
 - `amount` (Decimal)
 - `txn_type` (ENUM: DEPOSIT, WITHDRAWAL, TRANSFER_IN, TRANSFER_OUT)
 - `counterparty` (String)
 - `reference` (String - unique)
 - `description` (String)
+- `balance_after` (Decimal)
 - `created_at` (Timestamp)
 - `updated_at` (Timestamp)
 
@@ -348,10 +686,6 @@ Once the service is running, access the API documentation at:
 - `request_body` (JSON)
 - `expires_at` (Timestamp)
 - `created_at` (Timestamp)
-
-#### account_projections (denormalized)
-- `account_id` (Primary Key)
-- `customer_id` (Reference)
 - `account_number` (String)
 - `account_type` (ENUM)
 - `current_balance` (Decimal)

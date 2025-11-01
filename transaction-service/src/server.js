@@ -22,6 +22,10 @@ const swaggerSpec = require('./config/swagger');
 // Import logger
 const { logger } = require('./utils/logger');
 
+// Import messaging
+const consumerManager = require('./messaging/ConsumerManager');
+const transactionService = require('./services/TransactionService');
+
 // Create Express app
 const app = express();
 
@@ -115,6 +119,9 @@ const HOST = process.env.HOST || '0.0.0.0';
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   
+  // Stop RabbitMQ consumers
+  await consumerManager.shutdown();
+  
   // Close database connections
   const db = require('./database/connection');
   await db.close();
@@ -124,6 +131,9 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
+  
+  // Stop RabbitMQ consumers
+  await consumerManager.shutdown();
   
   // Close database connections
   const db = require('./database/connection');
@@ -144,10 +154,30 @@ process.on('uncaughtException', (err) => {
 });
 
 // Start server
-const server = app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, async () => {
   logger.info(`Transaction Service started on ${HOST}:${PORT}`);
   logger.info(`API Documentation available at http://${HOST}:${PORT}/api-docs`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Initialize and start RabbitMQ consumers
+  try {
+    logger.info('Initializing RabbitMQ consumers...');
+    await consumerManager.startAll();
+    logger.info('RabbitMQ consumers started successfully');
+    
+    // Initialize transaction publisher
+    const transactionPublisher = consumerManager.getPublisher('transaction');
+    if (transactionPublisher) {
+      transactionService.setTransactionPublisher(transactionPublisher);
+      logger.info('Transaction publisher initialized successfully');
+    } else {
+      logger.warn('Transaction publisher not available');
+    }
+  } catch (error) {
+    logger.error('Failed to start RabbitMQ consumers:', error);
+    // Don't exit, allow the service to run without messaging
+    logger.warn('Service will continue without RabbitMQ consumers');
+  }
 });
 
 // Export app for testing

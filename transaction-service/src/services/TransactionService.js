@@ -1,7 +1,26 @@
 const transactionRepository = require('../repositories/TransactionRepository');
 const accountProjectionRepository = require('../repositories/AccountProjectionRepository');
+const customerProjectionRepository = require('../repositories/CustomerProjectionRepository');
 const idempotencyKeyRepository = require('../repositories/IdempotencyKeyRepository');
 const { generateReference } = require('../utils/referenceGenerator');
+const transactionRepository = require('../repositories/TransactionRepository');
+const accountProjectionRepository = require('../repositories/AccountProjectionRepository');
+const customerProjectionRepository = require('../repositories/CustomerProjectionRepository');
+const idempotencyKeyRepository = require('../repositories/IdempotencyKeyRepository');
+const { generateReference } = require('../utils/referenceGenerator');
+const { logger } = require('../utils/logger');
+const db = require('../database/connection');
+
+// Publisher will be set by ConsumerManager
+let transactionPublisher = null;
+
+/**
+ * Set the transaction publisher instance
+ * @param {TransactionPublisher} publisher - The publisher instance
+ */
+function setTransactionPublisher(publisher) {
+  transactionPublisher = publisher;
+}
 const db = require('../database/connection');
 
 /**
@@ -46,6 +65,40 @@ class TransactionService {
       description
     });
 
+    // Publish transaction event (non-blocking)
+    setImmediate(async () => {
+      try {
+        if (!transactionPublisher) {
+          logger.warn('TransactionPublisher not available, skipping event publishing');
+          return;
+        }
+        
+        await transactionPublisher.publishTransactionCompleted({
+          transactionId: transaction.id,
+          accountId: account_id,
+          amount,
+          type: 'DEPOSIT',
+          reference,
+          counterparty,
+          description,
+          newBalance: creditCheck.newBalance,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Also publish balance update event
+        await transactionPublisher.publishBalanceUpdated({
+          accountId: account_id,
+          newBalance: creditCheck.newBalance,
+          transactionId: transaction.id,
+          changeAmount: amount, // Positive for deposit
+          timestamp: new Date().toISOString()
+        });
+      } catch (publishError) {
+        logger.error('Failed to publish deposit event:', publishError);
+        // Don't fail the transaction for publishing errors
+      }
+    });
+
     return {
       success: true,
       transaction: transaction.toJSON(),
@@ -88,6 +141,40 @@ class TransactionService {
       counterparty,
       reference,
       description
+    });
+
+    // Publish withdrawal event (non-blocking)
+    setImmediate(async () => {
+      try {
+        if (!transactionPublisher) {
+          logger.warn('TransactionPublisher not available, skipping event publishing');
+          return;
+        }
+        
+        await transactionPublisher.publishTransactionCompleted({
+          transactionId: transaction.id,
+          accountId: account_id,
+          amount,
+          type: 'WITHDRAWAL',
+          reference,
+          counterparty,
+          description,
+          newBalance: debitCheck.newBalance,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Also publish balance update event
+        await transactionPublisher.publishBalanceUpdated({
+          accountId: account_id,
+          newBalance: debitCheck.newBalance,
+          transactionId: transaction.id,
+          changeAmount: -amount, // Negative for withdrawal
+          timestamp: new Date().toISOString()
+        });
+      } catch (publishError) {
+        logger.error('Failed to publish withdrawal event:', publishError);
+        // Don't fail the transaction for publishing errors
+      }
     });
 
     return {
@@ -206,6 +293,49 @@ class TransactionService {
           result
         );
       }
+
+      // Publish transfer event (non-blocking)
+      setImmediate(async () => {
+        try {
+          if (!transactionPublisher) {
+            logger.warn('TransactionPublisher not available, skipping event publishing');
+            return;
+          }
+          
+          await transactionPublisher.publishTransferCreated({
+            transferReference: result.transfer_reference,
+            fromAccountId: from_account_id,
+            toAccountId: to_account_id,
+            amount,
+            description,
+            debitTransactionId: result.debit_transaction.txn_id,
+            creditTransactionId: result.credit_transaction.txn_id,
+            fromAccountNewBalance: result.from_account_new_balance,
+            toAccountNewBalance: result.to_account_new_balance,
+            timestamp: new Date().toISOString()
+          });
+
+          // Publish balance update events for both accounts
+          await transactionPublisher.publishBalanceUpdated({
+            accountId: from_account_id,
+            newBalance: result.from_account_new_balance,
+            transactionId: result.debit_transaction.txn_id,
+            changeAmount: -amount, // Negative for debit
+            timestamp: new Date().toISOString()
+          });
+
+          await transactionPublisher.publishBalanceUpdated({
+            accountId: to_account_id,
+            newBalance: result.to_account_new_balance,
+            transactionId: result.credit_transaction.txn_id,
+            changeAmount: amount, // Positive for credit
+            timestamp: new Date().toISOString()
+          });
+        } catch (publishError) {
+          logger.error('Failed to publish transfer event:', publishError);
+          // Don't fail the transaction for publishing errors
+        }
+      });
 
       return result;
 
@@ -349,3 +479,4 @@ class TransactionService {
 }
 
 module.exports = new TransactionService();
+module.exports.setTransactionPublisher = setTransactionPublisher;

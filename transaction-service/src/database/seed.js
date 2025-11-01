@@ -5,6 +5,73 @@ const { generateReference } = require('../utils/referenceGenerator');
  * Seed data for development and testing
  */
 const seedData = {
+  // Customer projections (denormalized from customer service)
+  customerProjections: [
+    {
+      customer_id: 1,
+      customer_number: 'CUST001',
+      first_name: 'John',
+      last_name: 'Doe',
+      email: 'john.doe@email.com',
+      phone: '+91-9876543210',
+      status: 'ACTIVE'
+    },
+    {
+      customer_id: 2,
+      customer_number: 'CUST002',
+      first_name: 'Jane',
+      last_name: 'Smith',
+      email: 'jane.smith@email.com',
+      phone: '+91-9876543211',
+      status: 'ACTIVE'
+    },
+    {
+      customer_id: 8,
+      customer_number: 'CUST008',
+      first_name: 'Michael',
+      last_name: 'Johnson',
+      email: 'michael.johnson@email.com',
+      phone: '+91-9876543218',
+      status: 'ACTIVE'
+    },
+    {
+      customer_id: 9,
+      customer_number: 'CUST009',
+      first_name: 'Sarah',
+      last_name: 'Wilson',
+      email: 'sarah.wilson@email.com',
+      phone: '+91-9876543219',
+      status: 'ACTIVE'
+    },
+    {
+      customer_id: 25,
+      customer_number: 'CUST025',
+      first_name: 'David',
+      last_name: 'Brown',
+      email: 'david.brown@email.com',
+      phone: '+91-9876543225',
+      status: 'ACTIVE'
+    },
+    {
+      customer_id: 28,
+      customer_number: 'CUST028',
+      first_name: 'Emily',
+      last_name: 'Davis',
+      email: 'emily.davis@email.com',
+      phone: '+91-9876543228',
+      status: 'ACTIVE'
+    },
+    {
+      customer_id: 35,
+      customer_number: 'CUST035',
+      first_name: 'Robert',
+      last_name: 'Miller',
+      email: 'robert.miller@email.com',
+      phone: '+91-9876543235',
+      status: 'ACTIVE'
+    }
+  ],
+
   // Account projections (denormalized from account service)
   accountProjections: [
     {
@@ -187,12 +254,38 @@ async function clearData() {
   await db.query('DELETE FROM idempotency_keys');
   await db.query('DELETE FROM transactions');
   await db.query('DELETE FROM account_projections');
+  await db.query('DELETE FROM customer_projections');
   
   // Reset sequences
   await db.query('ALTER SEQUENCE transactions_txn_id_seq RESTART WITH 1');
   await db.query('ALTER SEQUENCE idempotency_keys_id_seq RESTART WITH 1');
   
   console.log('Existing data cleared');
+}
+
+/**
+ * Seed customer projections
+ */
+async function seedCustomerProjections() {
+  console.log('Seeding customer projections...');
+  
+  for (const customer of seedData.customerProjections) {
+    await db.query(`
+      INSERT INTO customer_projections 
+      (customer_id, customer_number, first_name, last_name, email, phone, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      customer.customer_id,
+      customer.customer_number,
+      customer.first_name,
+      customer.last_name,
+      customer.email,
+      customer.phone,
+      customer.status
+    ]);
+  }
+  
+  console.log(`Seeded ${seedData.customerProjections.length} customer projections`);
 }
 
 /**
@@ -300,6 +393,7 @@ async function seed() {
     console.log('Starting database seeding...');
     
     await clearData();
+    await seedCustomerProjections();
     await seedAccountProjections();
     await seedTransactions();
     await seedIdempotencyKeys();
@@ -307,11 +401,13 @@ async function seed() {
     console.log('Database seeding completed successfully!');
     
     // Show summary
+    const customerCount = await db.query('SELECT COUNT(*) FROM customer_projections');
     const accountCount = await db.query('SELECT COUNT(*) FROM account_projections');
     const transactionCount = await db.query('SELECT COUNT(*) FROM transactions');
     const keyCount = await db.query('SELECT COUNT(*) FROM idempotency_keys');
     
     console.log('\nSeeding Summary:');
+    console.log(`- Customer Projections: ${customerCount.rows[0].count}`);
     console.log(`- Account Projections: ${accountCount.rows[0].count}`);
     console.log(`- Transactions: ${transactionCount.rows[0].count}`);
     console.log(`- Idempotency Keys: ${keyCount.rows[0].count}`);

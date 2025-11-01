@@ -137,19 +137,28 @@ class TransactionController {
   async healthCheck(req, res, next) {
     try {
       const db = require('../database/connection');
+      const consumerManager = require('../messaging/ConsumerManager');
+      
       const dbHealth = await db.healthCheck();
+      const messagingHealth = await consumerManager.healthCheck();
+      
+      const overallHealthy = dbHealth.status === 'connected' && messagingHealth.status === 'healthy';
       
       const health = {
-        status: 'healthy',
+        status: overallHealthy ? 'healthy' : 'unhealthy',
         service: 'transaction-service',
         version: '1.0.0',
         timestamp: new Date().toISOString(),
         database: dbHealth,
+        messaging: messagingHealth,
         uptime: process.uptime()
       };
 
-      const response = ApiResponse.success(health, 'Service is healthy');
-      res.status(response.statusCode).json(response);
+      const statusCode = overallHealthy ? 200 : 503;
+      const message = overallHealthy ? 'Service is healthy' : 'Service is unhealthy';
+      
+      const response = ApiResponse.success(health, message);
+      res.status(statusCode).json(response);
     } catch (error) {
       const health = {
         status: 'unhealthy',

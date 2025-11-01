@@ -8,6 +8,20 @@
 CREATE TYPE transaction_type AS ENUM ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER_IN', 'TRANSFER_OUT');
 CREATE TYPE account_type AS ENUM ('SAVINGS', 'CURRENT', 'SALARY');
 CREATE TYPE account_status AS ENUM ('ACTIVE', 'FROZEN', 'CLOSED');
+CREATE TYPE customer_status AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'CLOSED');
+
+-- Customer projections table (denormalized data from Customer Service)
+-- This contains minimal customer info that might be needed for transaction processing
+CREATE TABLE customer_projections (
+    customer_id BIGINT PRIMARY KEY,
+    customer_number VARCHAR(20) NOT NULL UNIQUE,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(20),
+    status customer_status NOT NULL DEFAULT 'ACTIVE',
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Account projections table (denormalized data from Account Service)
 -- This contains minimal account info needed for transaction processing
@@ -43,6 +57,11 @@ CREATE TABLE transactions (
     CONSTRAINT valid_reference CHECK (reference ~ '^REF[0-9]{8}-[A-Z0-9]{6}$')
 );
 
+-- Add foreign key constraint for customer in account_projections
+ALTER TABLE account_projections 
+ADD CONSTRAINT fk_account_customer 
+FOREIGN KEY (customer_id) REFERENCES customer_projections(customer_id);
+
 -- Idempotency keys table for transfer operations
 CREATE TABLE idempotency_keys (
     id BIGSERIAL PRIMARY KEY,
@@ -63,6 +82,8 @@ CREATE INDEX idx_transactions_type ON transactions(txn_type);
 CREATE INDEX idx_transactions_reference ON transactions(reference);
 CREATE INDEX idx_account_projections_customer_id ON account_projections(customer_id);
 CREATE INDEX idx_account_projections_account_number ON account_projections(account_number);
+CREATE INDEX idx_customer_projections_customer_number ON customer_projections(customer_number);
+CREATE INDEX idx_customer_projections_email ON customer_projections(email);
 CREATE INDEX idx_idempotency_keys_key ON idempotency_keys(key);
 CREATE INDEX idx_idempotency_keys_expires_at ON idempotency_keys(expires_at);
 
