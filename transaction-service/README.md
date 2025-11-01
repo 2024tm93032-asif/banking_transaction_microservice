@@ -229,6 +229,9 @@ Access Adminer at http://localhost:8081 (when started with `--profile dev`):
 - **Password**: password
 - **Database**: transaction_db
 
+  <img width="478" height="215" alt="image" src="https://github.com/user-attachments/assets/e548d707-bf9c-4571-866b-9e7a87fcb256" />
+
+
 ## 📊 Sample Data
 
 After running the seed command, you'll have:
