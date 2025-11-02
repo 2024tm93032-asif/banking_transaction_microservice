@@ -1,7 +1,6 @@
 const rabbitMQConnection = require('./connection');
 const AccountConsumer = require('./consumers/AccountConsumer');
 const CustomerConsumer = require('./consumers/CustomerConsumer');
-const TransactionPublisher = require('./publishers/TransactionPublisher');
 const { logger } = require('../utils/logger');
 
 class ConsumerManager {
@@ -31,8 +30,8 @@ class ConsumerManager {
       const accountConsumer = new AccountConsumer();
       const customerConsumer = new CustomerConsumer();
 
-      // Initialize publishers
-      const transactionPublisher = new TransactionPublisher();
+      // Initialize publishers (import singleton instances)
+      const transactionPublisher = require('./publishers/TransactionPublisher');
 
       // Add consumers and publishers to the lists
       this.consumers = [accountConsumer, customerConsumer];
