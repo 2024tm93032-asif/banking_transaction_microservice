@@ -1,6 +1,6 @@
 const rabbitMQConnection = require('../connection');
 const { logger } = require('../../utils/logger');
-const AccountProjectionRepository = require('../../repositories/AccountProjectionRepository');
+const accountProjectionRepository = require('../../repositories/AccountProjectionRepository');
 
 class AccountConsumer {
   constructor() {
@@ -13,7 +13,7 @@ class AccountConsumer {
       'account.balance.updated'
     ];
     this.isConsuming = false;
-    this.accountRepository = new AccountProjectionRepository();
+    this.accountRepository = accountProjectionRepository;
   }
 
   /**

@@ -3,11 +3,6 @@ const accountProjectionRepository = require('../repositories/AccountProjectionRe
 const customerProjectionRepository = require('../repositories/CustomerProjectionRepository');
 const idempotencyKeyRepository = require('../repositories/IdempotencyKeyRepository');
 const { generateReference } = require('../utils/referenceGenerator');
-const transactionRepository = require('../repositories/TransactionRepository');
-const accountProjectionRepository = require('../repositories/AccountProjectionRepository');
-const customerProjectionRepository = require('../repositories/CustomerProjectionRepository');
-const idempotencyKeyRepository = require('../repositories/IdempotencyKeyRepository');
-const { generateReference } = require('../utils/referenceGenerator');
 const { logger } = require('../utils/logger');
 const db = require('../database/connection');
 
@@ -21,7 +16,6 @@ let transactionPublisher = null;
 function setTransactionPublisher(publisher) {
   transactionPublisher = publisher;
 }
-const db = require('../database/connection');
 
 /**
  * Transaction Service
