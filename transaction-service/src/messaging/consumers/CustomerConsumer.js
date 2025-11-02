@@ -1,6 +1,6 @@
 const rabbitMQConnection = require('../connection');
 const { logger } = require('../../utils/logger');
-const CustomerProjectionRepository = require('../../repositories/CustomerProjectionRepository');
+const customerProjectionRepository = require('../../repositories/CustomerProjectionRepository');
 
 class CustomerConsumer {
   constructor() {
@@ -13,7 +13,7 @@ class CustomerConsumer {
       'customer.deleted'
     ];
     this.isConsuming = false;
-    this.customerRepository = new CustomerProjectionRepository();
+    this.customerRepository = customerProjectionRepository;
   }
 
   /**
